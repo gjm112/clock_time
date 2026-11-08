@@ -1,0 +1,177 @@
+---
+title: "simulations"
+author: "Anaum Chaudhry"
+date: "2026-11-02"
+output: html_document
+---
+
+```{r}
+library(circular)
+library(tidyverse)
+```
+
+Correct model (from Friday 10/30):
+```{r}
+set.seed(1)
+
+# predictors
+n <- 5000
+x <- data.frame(x1 = rnorm(n), x2 = rnorm(n), x3 = rnorm(n))
+
+# parameters
+k <- 5 
+beta <- c(0,0.5, 0.5) #starting simple
+beta0 <- 2
+
+# calculating linear predictors and conditional mean directions
+xb <- as.vector(as.matrix(x) %*% beta)
+
+# link function -> mu = 2arctan(xbeta), when we run it through this, we are getting back to the angles
+mu <- beta0 + 2 * atan(xb) 
+
+# generate circular responses from VM dist
+y <- sapply(mu, function(m) {
+  as.numeric(rvonmises(1, mu = circular(m), kappa = k))
+})
+
+# visualizing simulated responses using rose diagram
+rose.diag(circular(y), bins = 24, col = "mediumvioletred")
+
+# creating simulated dataset
+sim_data <- data.frame(x, y)
+#head(sim_data)
+
+# linear regression
+mod1 <- lm(y ~ x1 + x2 + x3, data = sim_data)
+summary(mod1)
+
+# circular regression
+mod2 <- lm.circular(y = circular(y), x = as.matrix(x), type = "c-l", init = c(0, 0, 0))
+
+```
+
+Testing diff vals of kappa for lin vs cir reg
+want to answer the question: as kappa changes, how does the circular estimate change from the linear estimate?
+
+using one predictor, n = 500, true beta = 0.1, intercept = 2, different values of kappa, estimate slope for linear kappa and circular kappa
+```{r}
+set.seed(1)
+# parameters
+n <- 500
+beta0 <- 2
+beta <- 2
+
+# (methods research) different values of kappa based on:
+# 0 - uniform dist around circle
+# 0.5 - very low concentration
+# 1 - low concentration
+# 5 - moderate concentration
+# 10 - high concentration
+# 20 - very high concentration
+kappas <- c(0.25, 0.5, 0.75, 1, 3)
+ # later add more vals
+
+
+
+# store estimated coefficients
+beta_linear <- numeric(length(kappas)) # storing linear estimates only
+beta_circular <- numeric(length(kappas)) # storing circular estimates only
+
+#for (i in 1:nsim) {
+#  results[[i]] <- lm_sim()
+#}
+
+# simulation
+beta_linear <- beta_circular <- list()
+  
+nsim <- 100
+for (i in 1:length(kappas)) {
+
+  k <- kappas[i] # current iteration
+  beta_linear[[i]] <- beta_circular[[i]] <- list()
+  for (j in 1:nsim){print(j)
+    
+  # one predictor to keep it simple
+    x <- rnorm(n)
+    
+    # link function
+    mu <- beta0 + 2*atan(beta*x)
+    
+  # generate circular responses (from previous model)
+  y <- sapply(mu, function(m) {
+    as.numeric(rvonmises(1, mu = circular(m), kappa = k)) 
+  } - pi/2) %% (2*pi) 
+
+  # fit linear regression
+  mod1 <- lm(y ~ x)
+  beta_linear[[i]][j] <- coef(mod1)[1] + mean(x) * coef(mod1)[2] # saving lin reg coef, [2]=slope
+# ^reversing process to get mus
+  
+  # fit circular regression
+  mod2 <- lm.circular(y = circular(y), x = matrix(x, ncol = 1), type = "c-l", init = 0)
+  beta_circular[[i]][j] <- mod2$mu + 2*atan(mean(x) * mod2$coefficients[1]) # saving cir reg coef
+}}
+```
+
+
+```{r}
+data.frame(beta_circ = unlist(lapply(beta_circular, function(x){mean(unlist(x))})),
+beta_linear = unlist(lapply(beta_linear, function(x){mean(unlist(x))})), 
+kappa = kappas) 
+
+
+results <- data.frame(beta =  c(unlist(lapply(beta_circular, function(x){mean(unlist(x))})),unlist(lapply(beta_linear, function(x){mean(unlist(x))}))), type = c(rep("circ",length(kappas)),rep("linear",length(kappas))), kappa = rep(kappas,2))
+
+results %>% 
+  ggplot(aes(x = kappa, y = beta, color = type )) + 
+  geom_line()
+
+
+rose.diag(y, bins = 24, main = paste("kappa =", k))
+rose.diag(x, bins = 24, main = paste("kappa =", k))
+
+plot(x,y)
+
+unlist(lapply(beta_circular, function(x){sd(unlist(x))}))
+
+
+
+# results
+results <- data.frame(kappa = kappas, beta_linear = beta_linear, beta_circular = beta_circular)
+results
+
+data.frame(x = x,y =y, r = 1)  %>% ggplot(aes(x = y, y = r, color = x)) + geom_point() + coord_polar() + scale_color_viridis_b()
+```
+
+visualizing
+```{r}
+# linear regression estimates
+plot(results$kappa, results$beta_linear, type = "o", col = "deeppink", xlab = "Kappa", ylab = "Estimated Beta", main = "Linear vs Circular Regression", ylim = range(c(results$beta_linear, results$beta_circular)))
+
+# circular regression estimates
+lines(results$kappa, results$beta_circular, type = "o", col = "deepskyblue")
+
+# legend
+legend("topright", legend = c("Linear", "Circular"), col = c("deeppink", "deepskyblue"), pch = 1)
+
+# true beta 
+abline(h = beta, lty = 2)
+```
+
+- shift where the ys are and always split at 0
+- different kappas, different rotations/splitting points of the ys
+- within these bounds (vals of kappa and splitting) you can do a linear regression and it will be okay
+- we need to make a region of boundaries 
+- convert ys to polar coords
+
+
+to do:
+
+1. make a bunch of plots to show different splits
+kappas on the x
+
+2. when i run the simulations, save the output
+qmd file
+just load the script instead of running it
+
+3. make a folder called library with all of the sources
