@@ -1,0 +1,406 @@
+---
+title: "Clock Time First Stage"
+format: html
+editor: visual
+execute: 
+  cache: true
+---
+
+```{r, include=FALSE}
+library(circular)
+library(tidyverse)
+library(tidyr)
+library(ggplot2)
+```
+
+### General Notes:
+
+$\mu_i = 2\arctan(\beta_0 + X_i^T\beta)$ : link function
+
+$Y_i \mid X_i \sim \mathrm{VM}(\mu_i, \kappa)$ : Von Meises distribution
+
+Concentration Parameter $\kappa$:
+
+0 - uniform dist around circle
+
+0.5 - very low concentration
+
+1 - low concentration
+
+5 - moderate concentration
+
+10 - high concentration
+
+20 - very high concentration
+
+### Model (10/30)
+
+```{r}
+set.seed(1)
+
+# predictors
+n <- 5000
+x <- data.frame(x1 = rnorm(n), x2 = rnorm(n), x3 = rnorm(n))
+
+# parameters
+k <- 5 
+beta <- c(0,0.5, 0.5) #starting simple
+beta0 <- 2
+
+# calculating linear predictors and conditional mean directions
+xb <- as.vector(as.matrix(x) %*% beta)
+
+# link function -> mu = 2arctan(xbeta), when we run it through this, we are getting back to the angles
+mu <- beta0 + 2 * atan(xb) 
+
+# generate circular responses from VM dist
+y <- sapply(mu, function(m) {
+  as.numeric(rvonmises(1, mu = circular(m), kappa = k))
+})
+
+# visualizing simulated responses using rose diagram
+rose.diag(circular(y), bins = 24, col = "mediumvioletred")
+
+# creating simulated dataset
+sim_data <- data.frame(x, y)
+#head(sim_data)
+
+# linear regression
+mod1 <- lm(y ~ x1 + x2 + x3, data = sim_data)
+summary(mod1)
+
+# circular regression
+mod2 <- lm.circular(y = circular(y), x = as.matrix(x), type = "c-l", init = c(0, 0, 0))
+
+```
+
+We want to answer the question: How does kappa (concentration) and the location of the splitting point affect the accuracy of linear regression when analyzing circular data, and under what conditions is circular regression necessary?
+
+\^ doing this by looking at the $\mu$s
+
+\^ by rotating the responses, we are changing the splitting point.
+
+### Simulating with different values of Kappa (11/06)
+
+### Rotation = 0 (standard)
+
+```{r}
+set.seed(1)
+
+# parameters
+n <- 500
+beta0 <- 2
+beta <- 2
+
+# vary kappas
+kappas <- c(0.3, 0.5, 0.75, 1)
+
+# different rotations
+rotation <- 0
+
+# store estimates
+beta_linear_0 <- beta_circular_0 <- list()
+
+nsim <- 100
+
+for (i in 1:length(kappas)) {
+  
+  k <- kappas[i]
+  beta_linear_0[[i]] <- beta_circular_0[[i]] <- list()
+  
+  for (j in 1:nsim) {
+    print(j)
+    
+    x <- rnorm(n)
+    mu <- beta0 + 2*atan(beta*x)
+    
+    # generate original circular responses
+    y_original <- sapply(mu, function(m) {
+      as.numeric(rvonmises(1, mu = circular(m), kappa = k))})
+    
+    # rotate observations and split at 0
+    y <- (y_original - rotation) %% (2*pi)
+    
+    # fit linear regression
+    mod1 <- lm(y ~ x)
+    
+    beta_linear_0[[i]][j] <- coef(mod1)[1] + mean(x) * coef(mod1)[2]
+    
+    # fit circular regression
+    mod2 <- lm.circular(y = circular(y), x = matrix(x, ncol = 1), type = "c-l", init = 1)
+    
+    beta_circular_0[[i]][j] <- mod2$mu + 2*atan(mean(x) * mod2$coefficients[1])
+  }
+}
+
+data.frame(beta_circ = unlist(lapply(beta_circular_0, function(x){mean(unlist(x))})), beta_linear = unlist(lapply(beta_linear_0, function(x){mean(unlist(x))})), kappa = kappas) 
+
+results_0 <- data.frame(beta =  c(unlist(lapply(beta_circular_0, function(x){mean(unlist(x))})),unlist(lapply(beta_linear_0, function(x){mean(unlist(x))}))), type = c(rep("circ",length(kappas)),rep("linear",length(kappas))), kappa = rep(kappas,2))
+
+results_0 %>% 
+  ggplot(aes(x = kappa, y = beta, color = type )) + 
+  geom_line()
+
+rose.diag(y, bins = 24, main = paste("Y, kappa =", k))
+rose.diag(x, bins = 24, main = paste("X, kappa =", k))
+
+plot(x,y)
+
+unlist(lapply(beta_circular_0, function(x){sd(unlist(x))}))
+
+# results
+results_0 <- data.frame(kappa = kappas, beta_linear = unlist(lapply(beta_linear_0, function(x) { mean(unlist(x), na.rm = TRUE)})), beta_circular = unlist(lapply(beta_circular_0, function(x) { mean(unlist(x), na.rm = TRUE)})))
+results_0
+
+data.frame(x = x,y =y, r = 1)  %>% ggplot(aes(x = y, y = r, color = x)) + geom_point() + coord_polar() + scale_color_viridis_b()
+```
+
+### Rotation = pi/4
+
+```{r}
+set.seed(1)
+
+# parameters
+n <- 500
+beta0 <- 2
+beta <- 2
+
+# vary kappas
+kappas <- c(0.3, 0.5, 0.75, 1)
+
+# different rotations
+rotation <- pi/4
+
+# store estimates
+beta_linear_45 <- beta_circular_45 <- list()
+
+nsim <- 100
+
+for (i in 1:length(kappas)) {
+  
+  k <- kappas[i]
+  beta_linear_45[[i]] <- beta_circular_45[[i]] <- list()
+  
+  for (j in 1:nsim) {
+    print(j)
+    
+    x <- rnorm(n)
+    mu <- beta0 + 2*atan(beta*x)
+    
+    # generate original circular responses
+    y_original <- sapply(mu, function(m) {
+      as.numeric(rvonmises(1, mu = circular(m), kappa = k))})
+    
+    # rotate observations and split at 0
+    y <- (y_original - rotation) %% (2*pi)
+    
+    # fit linear regression
+    mod1 <- lm(y ~ x)
+    
+    beta_linear_45[[i]][j] <- coef(mod1)[1] + mean(x) * coef(mod1)[2]
+    
+    # fit circular regression
+    mod2 <- lm.circular(y = circular(y), x = matrix(x, ncol = 1), type = "c-l", init = 1)
+    
+    beta_circular_45[[i]][j] <- mod2$mu + 2*atan(mean(x) * mod2$coefficients[1])
+  }
+}
+
+data.frame(beta_circ = unlist(lapply(beta_circular_45, function(x){mean(unlist(x))})), beta_linear = unlist(lapply(beta_linear_45, function(x){mean(unlist(x))})), kappa = kappas) 
+
+results_45 <- data.frame(beta =  c(unlist(lapply(beta_circular_45, function(x){mean(unlist(x))})),unlist(lapply(beta_linear_45, function(x){mean(unlist(x))}))), type = c(rep("circ",length(kappas)),rep("linear",length(kappas))), kappa = rep(kappas,2))
+
+results_45 %>% 
+  ggplot(aes(x = kappa, y = beta, color = type )) + 
+  geom_line()
+
+rose.diag(y, bins = 24, main = paste("Y, kappa =", k))
+rose.diag(x, bins = 24, main = paste("X, kappa =", k))
+
+plot(x,y)
+
+unlist(lapply(beta_circular_45, function(x){sd(unlist(x))}))
+
+# results
+results_45 <- data.frame(kappa = kappas, beta_linear = unlist(lapply(beta_linear_45, function(x) { mean(unlist(x), na.rm = TRUE)})), beta_circular = unlist(lapply(beta_circular_45, function(x) { mean(unlist(x), na.rm = TRUE)})))
+results_45
+
+data.frame(x = x,y =y, r = 1)  %>% ggplot(aes(x = y, y = r, color = x)) + geom_point() + coord_polar() + scale_color_viridis_b()
+```
+
+### Rotation = pi/2
+
+```{r}
+set.seed(1)
+
+# parameters
+n <- 500
+beta0 <- 2
+beta <- 2
+
+# vary kappas
+kappas <- c(0.3, 0.5, 0.75, 1)
+
+# different rotations
+rotation <- pi/2
+
+# store estimates
+beta_linear_90 <- beta_circular_90 <- list()
+
+nsim <- 100
+
+for (i in 1:length(kappas)) {
+  
+  k <- kappas[i]
+  beta_linear_90[[i]] <- beta_circular_90[[i]] <- list()
+  
+  for (j in 1:nsim) {
+    print(j)
+    
+    x <- rnorm(n)
+    mu <- beta0 + 2*atan(beta*x)
+    
+    # generate original circular responses
+    y_original <- sapply(mu, function(m) {
+      as.numeric(rvonmises(1, mu = circular(m), kappa = k))})
+    
+    # rotate observations and split at 0
+    y <- (y_original - rotation) %% (2*pi)
+    
+    # fit linear regression
+    mod1 <- lm(y ~ x)
+    
+    beta_linear_90[[i]][j] <- coef(mod1)[1] + mean(x) * coef(mod1)[2]
+    
+    # fit circular regression
+    mod2 <- lm.circular(y = circular(y), x = matrix(x, ncol = 1), type = "c-l", init = 1)
+    
+    beta_circular_90[[i]][j] <- mod2$mu + 2*atan(mean(x) * mod2$coefficients[1])
+  }
+}
+
+data.frame(beta_circ = unlist(lapply(beta_circular_90, function(x){mean(unlist(x))})), beta_linear = unlist(lapply(beta_linear_90, function(x){mean(unlist(x))})), kappa = kappas) 
+
+results_90 <- data.frame(beta =  c(unlist(lapply(beta_circular_90, function(x){mean(unlist(x))})),unlist(lapply(beta_linear_90, function(x){mean(unlist(x))}))), type = c(rep("circ",length(kappas)),rep("linear",length(kappas))), kappa = rep(kappas,2))
+
+results_90 %>% 
+  ggplot(aes(x = kappa, y = beta, color = type )) + 
+  geom_line()
+
+rose.diag(y, bins = 24, main = paste("Y, kappa =", k))
+rose.diag(x, bins = 24, main = paste("X, kappa =", k))
+
+plot(x,y)
+
+unlist(lapply(beta_circular_90, function(x){sd(unlist(x))}))
+
+# results
+results_90 <- data.frame(kappa = kappas, beta_linear = unlist(lapply(beta_linear_90, function(x) { mean(unlist(x), na.rm = TRUE)})), beta_circular = unlist(lapply(beta_circular_90, function(x) { mean(unlist(x), na.rm = TRUE)})))
+results_90
+
+data.frame(x = x,y =y, r = 1)  %>% ggplot(aes(x = y, y = r, color = x)) + geom_point() + coord_polar() + scale_color_viridis_b()
+```
+
+### Rotation = pi
+
+```{r}
+set.seed(1)
+
+# parameters
+n <- 500
+beta0 <- 2
+beta <- 2
+
+# vary kappas
+kappas <- c(0.3, 0.5, 0.75, 1)
+
+# different rotations
+rotation <- pi
+
+# store estimates
+beta_linear_180 <- beta_circular_180 <- list()
+
+nsim <- 100
+
+for (i in 1:length(kappas)) {
+  
+  k <- kappas[i]
+  beta_linear_180[[i]] <- beta_circular_180[[i]] <- list()
+  
+  for (j in 1:nsim) {
+    print(j)
+    
+    x <- rnorm(n)
+    mu <- beta0 + 2*atan(beta*x)
+    
+    # generate original circular responses
+    y_original <- sapply(mu, function(m) {
+      as.numeric(rvonmises(1, mu = circular(m), kappa = k))})
+    
+    # rotate observations and split at 0
+    y <- (y_original - rotation) %% (2*pi)
+    
+    # fit linear regression
+    mod1 <- lm(y ~ x)
+    
+    beta_linear_180[[i]][j] <- coef(mod1)[1] + mean(x) * coef(mod1)[2]
+    
+    # fit circular regression
+    mod2 <- lm.circular(y = circular(y), x = matrix(x, ncol = 1), type = "c-l", init = 1)
+    
+    beta_circular_180[[i]][j] <- mod2$mu + 2*atan(mean(x) * mod2$coefficients[1])
+  }
+}
+
+data.frame(beta_circ = unlist(lapply(beta_circular_180, function(x){mean(unlist(x))})), beta_linear = unlist(lapply(beta_linear_180, function(x){mean(unlist(x))})), kappa = kappas) 
+
+results_180 <- data.frame(beta =  c(unlist(lapply(beta_circular_180, function(x){mean(unlist(x))})),unlist(lapply(beta_linear_180, function(x){mean(unlist(x))}))), type = c(rep("circ",length(kappas)),rep("linear",length(kappas))), kappa = rep(kappas,2))
+
+results_180 %>% 
+  ggplot(aes(x = kappa, y = beta, color = type )) + 
+  geom_line()
+
+rose.diag(y, bins = 24, main = paste("Y, kappa =", k))
+rose.diag(x, bins = 24, main = paste("X, kappa =", k))
+
+plot(x,y)
+
+unlist(lapply(beta_circular_180, function(x){sd(unlist(x))}))
+
+# results
+results_180 <- data.frame(kappa = kappas, beta_linear = unlist(lapply(beta_linear_180, function(x) { mean(unlist(x), na.rm = TRUE)})), beta_circular = unlist(lapply(beta_circular_180, function(x) { mean(unlist(x), na.rm = TRUE)})))
+results_180
+
+data.frame(x = x,y =y, r = 1)  %>% ggplot(aes(x = y, y = r, color = x)) + geom_point() + coord_polar() + scale_color_viridis_b()
+```
+
+### 4 results plotted next to each other
+
+different splits with kappas on the x-axis
+
+```{r}
+
+# combine results from all four rotations
+results_all <- rbind(
+  data.frame(results_0, rotation = "0"),
+  data.frame(results_45, rotation = "pi/4"),
+  data.frame(results_90, rotation = "pi/2"),
+  data.frame(results_180, rotation = "pi"))
+
+results_long <- results_all %>%
+  pivot_longer(cols = c(beta_linear, beta_circular),names_to = "method",values_to = "estimate")
+
+# order rotations
+results_long$rotation <- factor(results_long$rotation, levels = c("0", "pi/4", "pi/2", "pi"))
+
+# plot
+ggplot(results_long,
+       aes(x = kappa, y = estimate, color = method)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ rotation, nrow = 1) +
+  scale_color_manual( values = c("beta_linear" = "deeppink", "beta_circular" = "deepskyblue"), labels = c("Linear", "Circular")) + labs( title = "Different Rotations: Linear vs Circular Reg", x = "Kappa", y = "Estimated Mean Response", color = "Regression Method") + theme_minimal()
+
+```
+
+when we split at 0, the estimated mean responses for linear and circular regression are similar. As we rotate the split, the difference between the mean responses for each method gets bigger. (linear and circular reg are producing diff results.
