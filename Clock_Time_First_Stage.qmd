@@ -109,7 +109,7 @@ for (i in 1:length(kappas)) {
   beta_linear_0[[i]] <- beta_circular_0[[i]] <- list()
   
   for (j in 1:nsim) {
-    print(j)
+    #print(j)
     
     x <- rnorm(n)
     mu <- beta0 + 2*atan(beta*x)
@@ -182,7 +182,7 @@ for (i in 1:length(kappas)) {
   beta_linear_45[[i]] <- beta_circular_45[[i]] <- list()
   
   for (j in 1:nsim) {
-    print(j)
+    #print(j)
     
     x <- rnorm(n)
     mu <- beta0 + 2*atan(beta*x)
@@ -255,7 +255,7 @@ for (i in 1:length(kappas)) {
   beta_linear_90[[i]] <- beta_circular_90[[i]] <- list()
   
   for (j in 1:nsim) {
-    print(j)
+    #print(j)
     
     x <- rnorm(n)
     mu <- beta0 + 2*atan(beta*x)
@@ -327,8 +327,8 @@ for (i in 1:length(kappas)) {
   k <- kappas[i]
   beta_linear_180[[i]] <- beta_circular_180[[i]] <- list()
   
-  for (j in 1:nsim) {
-    print(j)
+  for (j in 1:nsim){
+    #print(j)
     
     x <- rnorm(n)
     mu <- beta0 + 2*atan(beta*x)
